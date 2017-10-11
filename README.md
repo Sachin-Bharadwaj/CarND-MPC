@@ -127,6 +127,43 @@ that's just a guess.
 One last note here: regardless of the IDE used, every submitted project must
 still be compilable with cmake and make./
 
-## How to write a README
-A well written README file can enhance your project and portfolio.  Develop your abilities to create professional README files by completing [this free course](https://www.udacity.com/course/writing-readmes--ud777).
+## REFLECTIONS
+
+### Model
+
+The MPC model takes the following information from the simulator
+* ptsx  : x-cordinates of the waypoints ahead in global cordinates
+* ptsx  : y-cordinates of the waypoints ahead in global cordinates
+* px    : current x-position of the vehicle in global cordinates
+* py    : current y-position of the vehicle in global cordinates
+* psi   : current orientation of vehicle in global frame
+* v     : current speed of the vehicle
+* delta : steering angle of the car (NOTE: this is different from orientation (psi) of the car, it controls how the front wheels of car are turned)
+* a     : current throttle
+
+#### Polynomial Fitting & Preprocessing
+
+In order to simplify processing, the waypoints are transformed from simulator's global cordinates to car cordinates (refer lines 113-118 in main.cpp). First, each of the waypoints are translated to car cordinatres by subtracting out px and py. Then 2D rotation is applied on the translated points.
+
+A third-degree polynomial line is fit to these transformed waypoints using polyfit() function (this polynomial line is the path that vehicle should try). Since we are operating from the vehicle's coordinates, we can use px, py and psi all equal to zero: from the vehicle's standpoint. 
+The cross-track error is calculated by evaluating the polynomial function (polyeval()) at px (which in  zero). The psi error, or epsi, which is calculated from the derivative of polynomial fit line, is therefore simpler to calculate, as polynomials above the first order in the original equation are all eliminated through multiplication by zero (since x is zero). It is the negative arc tangent of the second coefficient (the first-order x was in the original polynomial).
+
+#### Handling Latency
+
+There is an additional latency of 100ms added in the simulator between the actuator calculation and when the simulator will actually perform that action. Since there is a latency in path going from estimator (MPC) to simulator, I have introduced similar latency on the forward path on the information going from simulator to estimator(MPC). Instead of passing the current information from simuator to MPC, I predict the state after 100ms using vehicle update equations (refer line 127 to 137 in main.cpp). Note that these equations were simplified again because of the coordinate system transformation. This new predicted state, along with the coefficients, are then fed into the mpc.Solve() function found in MPC.cpp.
+
+### Main.cpp
+
+Within the MPC class's Solve() function, the independent variables (based on state size, actuators, and timesteps) are first set to zero besides the first variable, which is set to the current input (i.e., predicted state accoutning for latency). The variables then have upper and lower boundaries set for their values. Defaults are taken from the Udacity lessons, for ex, delta (steering angle) within limits of -25 to 25 degrees and "a" within -1 to 1. Constraints are then set similarly to how variables were begun, with zero for all values other than the initial (based on input state).
+
+FG_eval class: First, overall cost function is created. The overall cost function consist of weighted cost of cte, epsi, speed and cost related to `delta` and `a`. Higher wieghts are set for cte and epsi cost so that vehicle remain on track. Similarly, non-zero weights are set for speed so that vehicle doesn't stop. The cost related to `delta_change` and `a_change` ensures that the ride is smooth.
+
+The updated cost constraints are calculated by first calculating the states at time t and time + 1. This, along with the variables and constraints calculated earlier, can be fed to the `ipopt` solver. This solver takes in all the information and will calculate the future predicted states, which also includes updated delta and "a" values that I use for my actuator values.
+
+### TimeStep (N) and Timestep duration(dt)
+
+N=10 and dt=0.1 was chosen after some trial and error. This means we essentially predict for only 1 sec. This seems to be a fine choice since car is able to maintain the track without any erratic driving.
+
+
+
 
